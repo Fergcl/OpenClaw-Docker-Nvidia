@@ -1,8 +1,12 @@
 # 🦞 Asistente de IA autoalojado con OpenClaw, Docker y la API de NVIDIA
+<br>
+<img width="1917" height="924" alt="Panel con Tenacitas respondiendo" src="https://github.com/user-attachments/assets/63693a46-473d-47d9-a964-8b30bee8faeb" />
+<br>
+  
+
 
 > Despliegue de un agente de IA personal y autoalojado (self-hosted) sobre Docker,
-> usando modelos servidos por la API de NVIDIA (NIM). Proyecto de aprendizaje
-> realizado durante mis estudios de **DAW (Desarrollo de Aplicaciones Web)**.
+> usando modelos servidos por la API de NVIDIA (NIM). Proyecto de aprendizaje.
 
 Este repositorio documenta, de principio a fin, cómo monté un asistente de IA
 privado corriendo en mi propia máquina: la instalación, las decisiones técnicas,
@@ -30,22 +34,33 @@ El resultado es un asistente personal que:
 
 ## 🏗️ Arquitectura
 
+- Sin inciar Docker ni el servicio:
+<img width="1915" height="1024" alt="Captura de pantalla 2026-06-26 010627" src="https://github.com/user-attachments/assets/9c604b00-49b6-4e75-a73f-5e32bf9562f0" />
+<br>
+<br>
+
+- Iniciando Docker y el servicio openclaw a la vez:
+<img width="1909" height="1031" alt="Captura de pantalla 2026-06-26 010712" src="https://github.com/user-attachments/assets/2d46b1b8-e6da-4e16-8f6f-e510f1762d59" />
+<br>
+<br>
+
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Windows 11 (host)                                           │
+│  Windows 11 (host)                                          │
 │                                                             │
-│   Navegador  ──HTTP──►  localhost:18789                      │
+│   Navegador  ──HTTP──►  localhost:18789                     │
 │                              │                              │
 │   ┌──────────────────────────┼───────────────────────────┐  │
-│   │  Docker (sobre WSL2)      │                           │  │
-│   │                           ▼                           │  │
+│   │  Docker (sobre WSL2)      │                          │  │
+│   │                           ▼                          │  │
 │   │   ┌─────────────────────────────────────────────┐    │  │
 │   │   │  Contenedor: OpenClaw Gateway               │    │  │
 │   │   │  - Node.js + OpenClaw (todo incluido)       │    │  │
 │   │   │  - Agente con workspace (.md) y memoria     │    │  │
 │   │   └──────────────────┬──────────────────────────┘    │  │
-│   │                      │                                │  │
-│   │     Volúmenes (-v):  │  ~/.openclaw  (config + datos) │  │
+│   │                      │                               │  │
+│   │    Volúmenes (-v):     ~/.openclaw  (config + datos) │  │
 │   └──────────────────────┼────────────────────────────────┘ │
 └──────────────────────────┼──────────────────────────────────┘
                            │  HTTPS (API key)
@@ -200,10 +215,12 @@ independientes del modelo (se puede cambiar de modelo sin perder la personalidad
 
 | Archivo       | Función                                            |
 |---------------|----------------------------------------------------|
-| `SOUL.md`     | Personalidad, tono, reglas de idioma y de conducta |
-| `USER.md`     | Información y preferencias del usuario              |
-| `MEMORY.md`   | Memoria a largo plazo (hechos duraderos)           |
-| `IDENTITY.md` | Nombre, emoji y "vibe" del agente                  |
+| `SOUL.md`     | Personalidad, tono, reglas de idioma y de conducta | [SOUL.md](workspace/SOUL.md)
+| `USER.md`     | Información y preferencias del usuario             | -> PRIVADO
+| `MEMORY.md`   | Memoria a largo plazo (hechos duraderos)           | -> PRIVADO
+| `IDENTITY.md` | Nombre, emoji y "vibe" del agente                  | [IDENTITY.md](workspace/IDENTITY.md)
+
+
 
 ---
 
