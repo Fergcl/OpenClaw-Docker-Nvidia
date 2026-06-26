@@ -75,6 +75,46 @@ con ese modelo y le aporta memoria, herramientas y personalidad.
 
 ---
 
+## 💾 Persistencia de datos: volúmenes Docker
+
+Una decisión clave del despliegue: **el contenedor corre en Docker, pero los
+datos viven en el host** (Windows), no dentro del contenedor.
+
+Esto se consigue con los volúmenes (`-v`) del comando de arranque:
+
+```bash
+-v $HOME/.openclaw:/home/node/.openclaw
+```
+
+Esa línea "enchufa" la carpeta `~/.openclaw` del host dentro del contenedor, de
+modo que toda la configuración, la memoria del agente y el workspace se guardan
+fuera del contenedor.
+
+**¿Por qué importa?** Los contenedores Docker son desechables por diseño. Si los
+datos vivieran dentro del contenedor, al borrarlo o recrearlo se perdería todo:
+configuración, memoria y personalidad del agente. Durante este proyecto borré y
+recreé el contenedor varias veces (para actualizar la imagen, resolver errores,
+etc.) y el agente **nunca perdió su estado**, porque los datos persistían en el
+host.
+
+
+| Contenedor Docker | El software en ejecución. Desechable y reemplazable. |
+| Carpeta `~/.openclaw` (host) | Los datos persistentes. Config, memoria y workspace. |
+
+**Ventajas prácticas de este enfoque:**
+
+- **Edición sencilla:** pude editar los archivos de configuración (`openclaw.json`,
+  `SOUL.md`…) directamente desde el host, sin entrar al contenedor.
+- **Copia de seguridad trivial:** basta con copiar la carpeta `~/.openclaw` para
+  respaldar todo el estado del agente.
+- **Portabilidad:** mover el proyecto a otro equipo es tan simple como llevar esa
+  carpeta y apuntar un contenedor nuevo a ella.
+
+> Es la práctica recomendada de Docker: separar el ciclo de vida del **contenedor**
+> (efímero) del de los **datos** (persistentes).
+
+---
+
 ## 🛠️ Stack técnico
 
 | Componente        | Tecnología                                   |
@@ -190,18 +230,42 @@ herramientas** (búsqueda web): generaba un formato que OpenClaw no podía
 interpretar (`reason=format`, respuesta vacía).
 
 **Solución:** usar Nemotron, que maneja correctamente el *tool calling*, para las
-tareas que requieren herramientas.
+tareas que requieren herramientas. El cambio se hace en `openclaw.json`,
+fijando el modelo primario:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "workspace": "/home/node/.openclaw/workspace",
+      "models": {
+        "nvidia/nemotron-3-ultra-550b-a55b": {},
+        "nvidia/z-ai/glm-5.1": {},
+        "nvidia/moonshotai/kimi-k2.5": {},
+        "nvidia/nemotron-3-super-120b-a12b": {}
+      },
+      "model": {
+        "primary": "nvidia/nemotron-3-super-120b-a12b"
+      }
+    }
+  },
+```
 
 **Aprendizaje:** no todos los modelos sirven para lo mismo. El "tool calling" es
 una capacidad concreta que conviene verificar, no dar por hecha.
+
 
 ### 5. Desajuste de versiones en la imagen
 
 **Causa:** la imagen traía la CLI y el gateway en versiones distintas, lo que
 provocaba que ciertas claves de configuración (y un plugin) fueran rechazadas.
+- El plugin de búsqueda Parallel requería una versión más nueva (>=2026.6.10) que la que tenía la CLI, así que se rechazaba y dejaba la config inválida (parallel-free).
+- La clave del timeout (agents.defaults.llm.idleTimeoutSeconds) que intentamos añadir era rechazada por el validador viejo (Invalid input), aunque es una clave válida en versiones más nuevas.
 
-**Solución:** identificar el desajuste en los logs y trabajar con las claves que
-la versión activa sí aceptaba, evitando las que no.
+**Solución:** Rodeamos el problema para no generar más problemas.
+- Abandonamos el plugin Parallel para la búsqueda web y usamos DuckDuckGo, que viene integrado y no depende de ese plugin problemático. (config set tools.web.search.provider duckduckgo)
+- Renunciamos a subir el timeout vía esa clave, porque el validador la rechazaba. En su lugar, resolvimos el problema de fondo (los timeouts) cambiando a un modelo más rápido (Nemotron Super), que no necesitaba más tiempo de espera.
+- Limpiamos a mano las entradas de config (openclaw.json) que el desajuste había dejado rotas.
 
 **Aprendizaje:** leer los logs con atención ahorra horas. El mensaje
 `version mismatch` explicaba de golpe varios errores aparentemente inconexos.
@@ -210,16 +274,44 @@ la versión activa sí aceptaba, evitando las que no.
 
 ## 🧠 Configuración del agente
 
-El comportamiento del agente se define con archivos **Markdown** en su *workspace*,
-independientes del modelo (se puede cambiar de modelo sin perder la personalidad):
+Toda la configuración y el estado del agente viven en la carpeta `.openclaw`,
+que (gracias a los volúmenes de Docker) se guarda en el host (mi user en windows),
+no dentro del contenedor. Su estructura es la siguiente:
 
-| Archivo       | Función                                            |
-|---------------|----------------------------------------------------|
-| `SOUL.md`     | Personalidad, tono, reglas de idioma y de conducta | [SOUL.md](workspace/SOUL.md)
-| `USER.md`     | Información y preferencias del usuario             | -> PRIVADO
-| `MEMORY.md`   | Memoria a largo plazo (hechos duraderos)           | -> PRIVADO
-| `IDENTITY.md` | Nombre, emoji y "vibe" del agente                  | [IDENTITY.md](workspace/IDENTITY.md)
+```text
+.openclaw/
+├── openclaw.json          # Configuración técnica (modelo, gateway, herramientas)
+│
+└── workspace/             # El "cerebro" del agente (personalidad y memoria). OTRO WORKSPACE (EJ: AGENTE2) ES OTRO AGENTE
+    ├── SOUL.md            # Personalidad, tono y reglas de conducta e idioma
+    ├── IDENTITY.md        # Nombre, emoji y "vibe" del agente
+    ├── USER.md            # Información y preferencias del usuario
+    ├── MEMORY.md          # Memoria a largo plazo (hechos duraderos)
+    ├── AGENTS.md          # Instrucciones operativas (reglas de funcionamiento)
+    ├── TOOLS.md           # Notas sobre el entorno y las herramientas
+    └── memory/            # Diario por días (notas y resúmenes de cada sesión)
+        └── AAAA-MM-DD.md
+```
 
+**Dos niveles bien diferenciados:**
+
+- **`openclaw.json`** → la configuración *técnica*: qué modelo se usa, en qué
+  puerto escucha el gateway, qué herramientas están activas, etc.
+- **`workspace/`** → la *identidad* del agente: quién es, cómo habla y qué
+  recuerda. Son archivos Markdown **independientes del modelo**: se puede cambiar
+  de modelo (de GLM a Nemotron, por ejemplo) sin que el agente pierda su
+  personalidad ni su memoria.
+
+| Archivo | Función |
+|---------|---------|
+| `openclaw.json` | Configuración técnica: modelo, gateway, herramientas |
+| `workspace/SOUL.md` | Personalidad, tono, reglas de idioma y de conducta |
+| `workspace/IDENTITY.md` | Nombre, emoji y "vibe" del agente |
+| `workspace/USER.md` | Información y preferencias del usuario |
+| `workspace/MEMORY.md` | Memoria a largo plazo (hechos duraderos) |
+| `workspace/AGENTS.md` | Instrucciones operativas (reglas de funcionamiento) |
+| `workspace/TOOLS.md` | Notas sobre el entorno y las herramientas |
+| `workspace/memory/` | Diario por días con notas y resúmenes de cada sesión |
 
 
 ---
@@ -234,16 +326,13 @@ independientes del modelo (se puede cambiar de modelo sin perder la personalidad
 - **Gestión de configuración** en JSON y resolución de estados inválidos.
 - **Criterio para elegir modelos** según velocidad, fiabilidad y capacidades
   (como el *tool calling*), no solo por su tamaño.
-- **Buenas prácticas de seguridad:** no exponer secretos (tokens, API keys) ni
-  datos personales en un repositorio público.
 
 ---
 
 ## ⚠️ Nota sobre seguridad
 
 Este repositorio contiene **únicamente documentación**. No incluye claves API,
-tokens ni datos personales. La configuración real y los secretos se mantienen
-fuera del control de versiones (`.gitignore`), como debe ser en cualquier proyecto.
+tokens ni datos personales.
 
 ---
 
