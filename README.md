@@ -26,6 +26,7 @@ El resultado es un asistente personal que:
 
 - Corre **aislado en un contenedor Docker**, sin ensuciar el sistema anfitrión.
 - Usa modelos abiertos servidos por NVIDIA (Nemotron, GLM, etc.).
+- También se pueden usar modelos locales como Ollama.
 - Mantiene **memoria persistente** y una personalidad configurable.
 - Es accesible desde el navegador mediante un panel web local.
 - Puede **buscar en internet** mediante una herramienta integrada.
